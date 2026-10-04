@@ -23,6 +23,19 @@
       </button>
     </div>
 
+    <!-- 框选截取按钮 -->
+    <div v-show="showMapTools" class="roi-toggle">
+      <button
+        class="roi-btn"
+        :class="{ active: roiApplied, drawing: roiDrawing }"
+        :title="roiTitle"
+        @click="toggleRoi"
+      >{{ roiLabel }}</button>
+    </div>
+
+    <!-- 地区选择 -->
+    <region-select v-show="showMapTools" />
+
 
   </div>
 </template>
@@ -33,17 +46,35 @@ import {Control} from "ol/control";
 import {useRoute} from "vue-router";
 import useMapStore from "@/stores/map";
 import TopographicMap3d from "@/components/topographic-map-3D.vue";
+import RegionSelect from "@/components/part/region-select.vue";
 import 'animate.css';
 
 const store = useMapStore()
 const route = useRoute()
-let {map,yearPlayer,monthPlayer,isMonthPlaying,isYearPlaying,is3D} = storeToRefs(store)
+let {map,yearPlayer,monthPlayer,isMonthPlaying,isYearPlaying,is3D,parcelRoiState} = storeToRefs(store)
 
 // 2D/3D 切换状态，使用 store 中的 is3D 以保持开关状态在组件重建时不丢失
 const is2D = computed(() => !is3D.value)
 
 // 判断当前是否在地形图视图
 const isTopographicMapView = computed(() => route.name === 'topographicMap');
+
+// 框选截取和地区选择目前支持这几个页面
+const MAP_TOOL_ROUTES = ['agriParcel', 'cropClassification']
+const showMapTools = computed(() => MAP_TOOL_ROUTES.includes(route.name))
+const roiDrawing = computed(() => parcelRoiState.value === 'drawing')
+const roiApplied = computed(() => parcelRoiState.value === 'applied')
+const roiLabel = computed(() => {
+  if (roiApplied.value) return '取消框选'
+  if (roiDrawing.value) return '拖拽框选…'
+  return '框选'
+})
+const roiTitle = computed(() => {
+  if (roiApplied.value) return '取消框选，恢复完整视图'
+  if (roiDrawing.value) return '在地图上拖出一个矩形'
+  return '在地图上框选一块区域，只显示框内内容'
+})
+const toggleRoi = () => store.toggleParcelRoi()
 
 // 处理滚轮事件，停止播放动画
 const handleScroll = function (){
@@ -182,6 +213,43 @@ let pageInstance = getCurrentInstance()
   top: 20px;
   right: 20px;
   z-index: 1000;
+}
+
+/* 框选截取按钮 */
+.roi-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.roi-btn {
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: rgb(191, 238, 255);
+  background-color: rgba(0, 35, 47, 0.85);
+  border: 1px solid rgb(191, 238, 255);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.roi-btn:hover {
+  background-color: rgba(6, 52, 66, 0.9);
+}
+
+.roi-btn.drawing {
+  color: #ffd479;
+  border-color: #ffd479;
+}
+
+.roi-btn.active {
+  background-color: rgb(191, 238, 255);
+  color: rgb(0, 35, 47);
+  border-color: rgb(191, 238, 255);
 }
 
 /* 2D/3D 切换按钮样式 */

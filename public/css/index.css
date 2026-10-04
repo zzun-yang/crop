@@ -6,10 +6,11 @@ body {
 }
 
 #mapView {
-    height: 75%;
+    /* 顶部留出 56px 给模块导航条，其余空间都给地图 */
+    height: calc(100% - 56px);
     width: 100%;
     position:absolute;
-    top:0;
+    top:56px;
 }
 
 #bottom {
@@ -20,17 +21,10 @@ body {
     bottom: 0;
     /*border-style: solid;*/
 
-    background-size: 7px 7px;
-    background-color: rgb(12, 44, 54);
-    background-image: -webkit-linear-gradient(-45deg,
-    rgba(0, 0, 0, .2) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(0, 0, 0, .2) 50%,
-    rgba(0, 0, 0, .2) 75%,
-    transparent 75%,
-    transparent);
-    /*background-image: linear-gradient(-45deg, rgba(0, 0, 0, .2) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, .2) 50%, rgba(0, 0, 0, .2) 75%, transparent 75%, transparent);*/
+    /* 各页面的内容都改成浮层了，这条只作为底部浮层的定位容器：
+       不再画背景，也不再拦截鼠标，地图可以铺到最下面 */
+    background: none;
+    pointer-events: none;
 
 }
 
@@ -62,6 +56,12 @@ body {
     border-left: 0;
     border-style: none;
     color: rgb(191, 238, 255);
+    pointer-events: none;
+}
+
+/* 容器本身透传鼠标，里面的浮层照常可点 */
+#bottom_right > * {
+    pointer-events: auto;
 }
 #landType{
     position:absolute;

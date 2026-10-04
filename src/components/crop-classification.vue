@@ -1,12 +1,16 @@
 <template>
   <div id="bottom_right">
    <crops-type/>
+   <date-timeline/>
+   <crop-analysis-panel/>
   </div>
 </template>
 
 <script setup>
 import {View} from "ol";
 import cropsType from "@/components/part/crops-type";
+import DateTimeline from "@/components/part/date-timeline.vue";
+import CropAnalysisPanel from "@/components/part/crop-analysis-panel.vue";
 import useMapStore from "@/stores/map";
 import {storeToRefs} from "pinia";
 import {onMounted} from "vue";

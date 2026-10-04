@@ -2,12 +2,14 @@
   <div id="bottom_right">
   <!-- <land-color/> -->
     <!-- <land-imagery/> -->
+    <date-timeline/>
   </div>
 </template>
 
 <script setup>
 import {View} from "ol";
 import LandImagery from "@/components/part/land-imagery.vue";
+import DateTimeline from "@/components/part/date-timeline.vue";
 import useMapStore from "@/stores/map";
 import {storeToRefs} from "pinia";
 import {onMounted} from "vue";

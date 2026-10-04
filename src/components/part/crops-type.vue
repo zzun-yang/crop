@@ -1,10 +1,7 @@
 <template>
   <div id="landType">
     <div class="landUse_p1">
-      <span class="span">LAND USE/CROP CLASSIFICATION CLASSES</span>
-      <span class="span" style="color: rgb(75, 112, 125)"
-        >CLICK TOTOGGLE VISIBILITY</span
-      >
+      <span class="legend-title">作物类型</span>
     </div>
     <div class="landUse_p2" id="landUse_p2">
       <div id="legend-container" class="legend-container" ref="landContent">
@@ -22,7 +19,7 @@
               style="width: 100%; height: 100%; border-radius: 0"
             />
           </div>
-          <span style="font-size: 20px;padding:10px">{{ item.name }}</span>
+          <span class="crop-name">{{ item.name }}</span>
         </div>
       </div>
     </div>
@@ -85,26 +82,86 @@ import {storeToRefs} from "pinia";
 
 
 <style scoped>
+/* 白底小窗口，钉在页面右下角，各类型竖着排一列 */
+#landType {
+  position: absolute;
+  right: 20px;
+  bottom: 28px;
+  left: auto;
+  top: auto;
+  transform: none;
+  width: auto;
+  height: auto;
+  padding: 9px 14px 11px;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  color: #22303f;
+}
+
+.landUse_p1 {
+  position: static;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: auto;
+  height: auto;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.legend-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #1a56c4;
+}
+
+.landUse_p2 {
+  position: static;
+  margin-left: 0;
+}
+
+#legend-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
 .crop-color {
-    width: 40px;
-    height: 40px;
-    margin-right: 5px;
-    transition: opacity 0.3s ease; /* 添加渐变过渡效果 */
-  
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
+  transition: opacity 0.2s ease;
+}
+
+.crop-name {
+  font-size: 12px;
+  white-space: nowrap;
+  color: #22303f;
 }
 
 .legend-item.clicked .crop-color {
-    opacity: 1; /* 点击后的按钮颜色保持不变 */
-    
+  opacity: 1;
 }
 
 .legend-item:not(.clicked) .crop-color {
-    opacity: 0.3; /* 未点击的按钮颜色变淡 */
+  opacity: 0.25;
 }
 
-/* 添加选中特效 */
+.legend-item:not(.clicked) .crop-name {
+  color: #a9b6c6;
+}
+
 .legend-item:active .crop-color {
-    /*transform: scale(1.2);*/
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
 }
 </style>
