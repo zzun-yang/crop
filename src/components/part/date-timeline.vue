@@ -45,6 +45,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import useMapStore from '@/stores/map'
+import { usePanelDrag } from '@/composables/usePanelDrag'
 
 const store = useMapStore()
 const {
@@ -107,43 +108,8 @@ const onDrag = evt => store.selectParcelTimelineIndex(evt.target.value)
 const onPickDate = evt => store.selectParcelTimelineDate(evt.target.value)
 const togglePlay = () => store.toggleParcelTimelinePlay()
 
-// ---------- 窗口拖动 ----------
-// pos 为 null 时用 CSS 里的默认位置（底部居中），一旦拖动过就固定成像素定位
-const panel = ref(null)
-const pos = ref(null)
-const panelStyle = computed(() => pos.value
-  ? { left: pos.value.left + 'px', top: pos.value.top + 'px', bottom: 'auto', transform: 'none' }
-  : null
-)
-
-let grabOffset = { x: 0, y: 0 }
-
-const onPointerMove = evt => {
-  const el = panel.value
-  if (!el || !pos.value) return
-  const maxLeft = Math.max(window.innerWidth - el.offsetWidth - 4, 4)
-  const maxTop = Math.max(window.innerHeight - el.offsetHeight - 4, 4)
-  pos.value = {
-    left: Math.min(Math.max(evt.clientX - grabOffset.x, 4), maxLeft),
-    top: Math.min(Math.max(evt.clientY - grabOffset.y, 4), maxTop)
-  }
-}
-
-const endDrag = () => {
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerup', endDrag)
-}
-
-const startDrag = evt => {
-  const el = panel.value
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  grabOffset = { x: evt.clientX - rect.left, y: evt.clientY - rect.top }
-  pos.value = { left: rect.left, top: rect.top }
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', endDrag)
-  evt.preventDefault()
-}
+// 窗口拖动
+const { panel, panelStyle, startDrag } = usePanelDrag()
 
 onMounted(() => {
   if (typeof ResizeObserver !== 'undefined' && ticksRef.value) {
@@ -157,7 +123,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  endDrag()
   if (ticksObserver) {
     ticksObserver.disconnect()
     ticksObserver = null
@@ -169,38 +134,39 @@ onBeforeUnmount(() => {
 .dt-panel {
   position: fixed;
   left: 50%;
-  bottom: 28px;
+  bottom: 32px;
   transform: translateX(-50%);
   z-index: 1200;
-  width: 400px;
-  padding: 5px 10px 7px;
+  width: 560px;
+  padding: 9px 16px 12px;
   box-sizing: border-box;
   background-color: #ffffff;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   color: #22303f;
-  font-size: 12px;
+  font-size: 15px;
   user-select: none;
 }
 
 .dt-bar {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 18px;
+  gap: 9px;
+  height: 24px;
   cursor: move;
   touch-action: none;
 }
 
 .dt-grip {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   background-image: radial-gradient(#a9b8cc 1px, transparent 1px);
   background-size: 4px 4px;
 }
 
 .dt-title {
+  font-size: 16px;
   font-weight: 600;
   color: #1a56c4;
   white-space: nowrap;
@@ -211,15 +177,15 @@ onBeforeUnmount(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 11px;
+  font-size: 13px;
   color: #8494a8;
 }
 
 .dt-body {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 3px;
+  gap: 12px;
+  margin-top: 6px;
 }
 
 .dt-play {
@@ -227,8 +193,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -242,8 +208,8 @@ onBeforeUnmount(() => {
 }
 
 .dt-play img {
-  width: 12px;
-  height: 12px;
+  width: 17px;
+  height: 17px;
   display: block;
   /* 图标本身是深色的，反转成白色才看得见 */
   filter: brightness(0) invert(1);
@@ -253,7 +219,7 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-width: 0;
   appearance: none;
-  height: 4px;
+  height: 6px;
   border: none;
   outline: none;
   border-radius: 2px;
@@ -268,8 +234,8 @@ onBeforeUnmount(() => {
 
 .dt-range::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #ffffff;
   border-radius: 50%;
   background-color: #1a73e8;
@@ -278,8 +244,8 @@ onBeforeUnmount(() => {
 }
 
 .dt-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #ffffff;
   border-radius: 50%;
   background-color: #1a73e8;
@@ -289,10 +255,10 @@ onBeforeUnmount(() => {
 
 .dt-date {
   flex: 0 0 auto;
-  width: 112px;
-  padding: 1px 4px;
+  width: 150px;
+  padding: 3px 6px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 15px;
   color: #22303f;
   background-color: #f4f7fb;
   border: 1px solid #cfdae8;
@@ -307,14 +273,14 @@ onBeforeUnmount(() => {
 
 .dt-ticks {
   position: relative;
-  height: 13px;
-  margin: 2px 120px 0 28px;
+  height: 18px;
+  margin: 4px 162px 0 42px;
 }
 
 .dt-ticks span {
   position: absolute;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: 13px;
   white-space: nowrap;
   color: #8494a8;
 }

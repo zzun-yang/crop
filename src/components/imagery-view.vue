@@ -19,8 +19,8 @@ const setMapView = () => {
   }
 
   const view = new View({
-    center:[(85.759192+90.764236)/2, (44.044693+44.438904)/2],
-    zoom:9,
+    center:[78.25, 45.72],
+    zoom:7.15,
     projection: 'EPSG:4326'
   })
   map.value.setView(view)
@@ -30,19 +30,8 @@ onMounted(setMapView)
 </script>
 
 <style scoped>
-/* 时序页的年份/月份滑杆仍然贴在底部，这里单独给它一条底色 */
 #bottom_right {
   width: 100%;
-  pointer-events: auto;
-  background-color: rgb(12, 44, 54);
-  background-image: -webkit-linear-gradient(-45deg,
-    rgba(0, 0, 0, .2) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(0, 0, 0, .2) 50%,
-    rgba(0, 0, 0, .2) 75%,
-    transparent 75%,
-    transparent);
-  background-size: 7px 7px;
+  pointer-events: none;
 }
 </style>

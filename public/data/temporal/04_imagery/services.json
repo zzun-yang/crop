@@ -1,0 +1,374 @@
+{
+  "verified_on": "2026-10-04",
+  "bbox": [
+    72,
+    42,
+    85,
+    49
+  ],
+  "layers": [
+    {
+      "id": "S1_2024",
+      "sensor": "S1",
+      "year": 2024,
+      "collection": "sentinel-1-rtc",
+      "search_id": "e6c80c4ad1430e8ff0d00ab5e70fd203",
+      "search": {
+        "collections": [
+          "sentinel-1-rtc"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2024-06-01T00:00:00Z/2024-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ]
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/e6c80c4ad1430e8ff0d00ab5e70fd203/WebMercatorQuad/tilejson.json?collection=sentinel-1-rtc&tile_format=png&minzoom=6&maxzoom=14&assets=vv&rescale=0%2C0.3&colormap_name=gray&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/e6c80c4ad1430e8ff0d00ab5e70fd203/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+      "rendering": "VV linear gamma0, grayscale 0..0.3",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            9,
+            103
+          ],
+          [
+            9,
+            103
+          ],
+          [
+            9,
+            103
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/e6c80c4ad1430e8ff0d00ab5e70fd203/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    },
+    {
+      "id": "S1_2025",
+      "sensor": "S1",
+      "year": 2025,
+      "collection": "sentinel-1-rtc",
+      "search_id": "b4e90bd184a9a5126ed079142cc2e337",
+      "search": {
+        "collections": [
+          "sentinel-1-rtc"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2025-06-01T00:00:00Z/2025-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ]
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/b4e90bd184a9a5126ed079142cc2e337/WebMercatorQuad/tilejson.json?collection=sentinel-1-rtc&tile_format=png&minzoom=6&maxzoom=14&assets=vv&rescale=0%2C0.3&colormap_name=gray&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/b4e90bd184a9a5126ed079142cc2e337/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+      "rendering": "VV linear gamma0, grayscale 0..0.3",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            0,
+            134
+          ],
+          [
+            0,
+            134
+          ],
+          [
+            0,
+            134
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/b4e90bd184a9a5126ed079142cc2e337/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    },
+    {
+      "id": "S1_2026",
+      "sensor": "S1",
+      "year": 2026,
+      "collection": "sentinel-1-rtc",
+      "search_id": "90425665f71176c3a601b46bcf8a4a18",
+      "search": {
+        "collections": [
+          "sentinel-1-rtc"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2026-06-01T00:00:00Z/2026-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ]
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/90425665f71176c3a601b46bcf8a4a18/WebMercatorQuad/tilejson.json?collection=sentinel-1-rtc&tile_format=png&minzoom=6&maxzoom=14&assets=vv&rescale=0%2C0.3&colormap_name=gray&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/90425665f71176c3a601b46bcf8a4a18/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+      "rendering": "VV linear gamma0, grayscale 0..0.3",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            0,
+            125
+          ],
+          [
+            0,
+            125
+          ],
+          [
+            0,
+            125
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/90425665f71176c3a601b46bcf8a4a18/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-1-rtc&assets=vv&rescale=0,0.3&colormap_name=gray&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    },
+    {
+      "id": "S2_2024",
+      "sensor": "S2",
+      "year": 2024,
+      "collection": "sentinel-2-l2a",
+      "search_id": "1be1e3e0a77811d250efdb0a0c7d3a5a",
+      "search": {
+        "collections": [
+          "sentinel-2-l2a"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2024-06-01T00:00:00Z/2024-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "eo:cloud_cover",
+            "direction": "asc"
+          },
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ],
+        "query": {
+          "eo:cloud_cover": {
+            "lt": 20
+          }
+        }
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/1be1e3e0a77811d250efdb0a0c7d3a5a/WebMercatorQuad/tilejson.json?collection=sentinel-2-l2a&tile_format=png&minzoom=9&maxzoom=14&assets=B04&assets=B03&assets=B02&rescale=0%2C3000&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/1be1e3e0a77811d250efdb0a0c7d3a5a/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+      "rendering": "L2A RGB B04/B03/B02, rescale 0..3000",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            142,
+            255
+          ],
+          [
+            129,
+            255
+          ],
+          [
+            111,
+            255
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/1be1e3e0a77811d250efdb0a0c7d3a5a/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    },
+    {
+      "id": "S2_2025",
+      "sensor": "S2",
+      "year": 2025,
+      "collection": "sentinel-2-l2a",
+      "search_id": "aba187e87e088daaa4c22c8e6f368b2f",
+      "search": {
+        "collections": [
+          "sentinel-2-l2a"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2025-06-01T00:00:00Z/2025-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "eo:cloud_cover",
+            "direction": "asc"
+          },
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ],
+        "query": {
+          "eo:cloud_cover": {
+            "lt": 20
+          }
+        }
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/aba187e87e088daaa4c22c8e6f368b2f/WebMercatorQuad/tilejson.json?collection=sentinel-2-l2a&tile_format=png&minzoom=9&maxzoom=14&assets=B04&assets=B03&assets=B02&rescale=0%2C3000&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/aba187e87e088daaa4c22c8e6f368b2f/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+      "rendering": "L2A RGB B04/B03/B02, rescale 0..3000",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            0,
+            255
+          ],
+          [
+            0,
+            255
+          ],
+          [
+            0,
+            255
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/aba187e87e088daaa4c22c8e6f368b2f/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    },
+    {
+      "id": "S2_2026",
+      "sensor": "S2",
+      "year": 2026,
+      "collection": "sentinel-2-l2a",
+      "search_id": "4350b161de45e6b4832a6b482ccb8e87",
+      "search": {
+        "collections": [
+          "sentinel-2-l2a"
+        ],
+        "bbox": [
+          72,
+          42,
+          85,
+          49
+        ],
+        "datetime": "2026-06-01T00:00:00Z/2026-09-30T23:59:59Z",
+        "sortby": [
+          {
+            "field": "eo:cloud_cover",
+            "direction": "asc"
+          },
+          {
+            "field": "datetime",
+            "direction": "desc"
+          }
+        ],
+        "query": {
+          "eo:cloud_cover": {
+            "lt": 20
+          }
+        }
+      },
+      "tilejson_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/4350b161de45e6b4832a6b482ccb8e87/WebMercatorQuad/tilejson.json?collection=sentinel-2-l2a&tile_format=png&minzoom=9&maxzoom=14&assets=B04&assets=B03&assets=B02&rescale=0%2C3000&nodata=0",
+      "xyz_url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/4350b161de45e6b4832a6b482ccb8e87/tiles/WebMercatorQuad/{z}/{x}/{y}.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+      "rendering": "L2A RGB B04/B03/B02, rescale 0..3000",
+      "test": {
+        "http_status": 200,
+        "image_size": [
+          256,
+          256
+        ],
+        "extrema": [
+          [
+            0,
+            255
+          ],
+          [
+            0,
+            255
+          ],
+          [
+            0,
+            255
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "url": "https://planetarycomputer.microsoft.com/api/data/v1/mosaic/4350b161de45e6b4832a6b482ccb8e87/tiles/WebMercatorQuad/9/363/182.png?collection=sentinel-2-l2a&assets=B04&assets=B03&assets=B02&rescale=0,3000&nodata=0",
+        "cors": "*"
+      },
+      "note": "Summer multi-date first-valid-pixel mosaic; not annual mean and not single-date image"
+    }
+  ]
+}

@@ -31,6 +31,9 @@ import VectorTileLayer from 'ol/layer/VectorTile';
 import PointerInteraction from 'ol/interaction/Pointer';
 
 import TileLayer from 'ol/layer/Tile';
+import ImageLayer from 'ol/layer/Image';
+import ImageStatic from 'ol/source/ImageStatic';
+import { fromArrayBuffer } from 'geotiff';
 
 
 
@@ -73,8 +76,23 @@ const CROP_ANALYSIS_PARCEL_FIELD = 'fid_1'; // 地块标识：同一地块会有
 const CROP_ANALYSIS_TYPE_FIELD = 'max_gridco'; // 作物类型编码
 const CROP_ANALYSIS_AREA_FIELD = 'shape_area'; // 面积字段，单位是平方度
 const CROP_ANALYSIS_MAX_FEATURES = 400000; // 单年单次取数的要素上限
+// 统计期间让框内的作物区块快速闪烁，出结果后定格
+const CROP_ANALYSIS_BLINK_MIN_MS = 1000; // 至少闪这么久再定格
+// 统计很慢时也不要让动画一直占着画面，到点就先定格回原图
+const CROP_ANALYSIS_BLINK_MAX_MS = 8000;
+// 统计期间给地图容器挂的标记类，CSS 靠它选中作物图层做色相循环
+const CROP_ANALYSIS_BLINK_CLASS = 'map-identifying';
+// 扫描效果：统计期间在框内叠一层矢量，每个地块独立随机换色
+const CROP_ANALYSIS_SCAN_MAX_FEATURES = 1500; // 最多覆盖多少个图斑
+const CROP_ANALYSIS_SCAN_INTERVAL = 130; // 重新上色的间隔（毫秒）
+const CROP_ANALYSIS_SCAN_CLASS = 'crop-scan-layer'; // 扫描层容器的类名，摘层时按它找
+// 四类作物在地图上的近似颜色，顺序对应图例 0-3
+const CROP_ANALYSIS_SCAN_COLORS = ['#8ab6d6', '#d9b45a', '#efe23c', '#35c65a'];
 // 没有框选时默认统计整个流域，用的是流域图层的范围
 const CROP_ANALYSIS_FULL_EXTENT = [72.4875, 42.2583, 85.0006, 49.1297];
+// 全流域那次统计很重（30 多万图斑），结果存一份到 sessionStorage，
+// 刷新页面后直接复用，不用再算一遍
+const CROP_ANALYSIS_STORAGE_KEY = 'cropAnalysisFullResult';
 
 // 农田页地区下拉框。数据还没接入，先内置几个流域内的地点作为占位，
 // 接数据时用 setParcelRegions 传入，或者放 /static/parcelRegions.json。
@@ -100,11 +118,27 @@ const readFeatureProperty = (properties, name) => {
 }
 
 
+// 时空数据模块：本地数据包 public/data/temporal/。
+// 高程、坡度的 TIFF 像元值按需读取，读完缓存在这里。
+const temporalRasterCache = new Map()
+const temporalRasterPromises = new Map()
+const TEMPORAL_RASTER_EXTENT = [72, 42, 85, 49]
+
+
 const useMapStore =  defineStore('map',{
     state:()=>({
             currentYear:2023,
             currentMonth:1,
             map: null,
+            // 时空数据模块：当前年月、已加载图层、地图色块显隐、悬停结果
+            temporalYear:2024,
+            temporalMonth:6,
+            temporalLayerInstances:{},
+            temporalLayerColorVisibility:{},
+            temporalLayerStatus:{},
+            temporalHoverGroup:'imagery',
+            temporalHoverInfo:null,
+            temporalRefreshTimer:null,
             yearInfo:[],
             monthInfo:[],
             featureInfo:[],
@@ -173,6 +207,13 @@ const useMapStore =  defineStore('map',{
             cropAnalysisScope:'full', // full 整个流域 / roi 框选范围
             cropAnalysisFullResult:null, // 整个流域的结果缓存，避免每次取消框选都重取
             cropAnalysisPendingKey:'', // 正在取数的范围标识，用来去重
+            cropAnalysisBlinkStopTimer:null, // 到点定格的定时器
+            cropAnalysisBlinkMaxTimer:null, // 超时兜底定格的定时器，统计太慢时用
+            cropAnalysisBlinkContainer:null, // 挂色相动画的作物图层容器
+            cropScanLayer:null, // 统计期间的扫描叠加层
+            cropScanTimer:null, // 扫描层的换色定时器
+            cropScanReqId:0,
+            cropAnalysisBlinkStartedAt:0,
             cropAnalysisReqId:0,
 
             // 地区下拉框
@@ -345,6 +386,178 @@ const useMapStore =  defineStore('map',{
             if(this.map && this.map.addLayer) this.map.addLayer(this.basicLayer);
         },
 
+        // 10.4 本地数据包：时空数据面板里的图层全部由这里统一加载/移除。
+        setTemporalPeriod:function({year, month}){
+            const nextYear = Number(year)
+            const nextMonth = Number(month)
+            if(this.temporalYear === nextYear && this.temporalMonth === nextMonth) return
+            this.temporalYear = nextYear
+            this.temporalMonth = nextMonth
+            if(this.temporalRefreshTimer) clearTimeout(this.temporalRefreshTimer)
+            this.temporalRefreshTimer = setTimeout(() => {
+                Object.keys(this.temporalLayerInstances).forEach(id => this.loadTemporalLayer(id, true))
+                this.temporalRefreshTimer = null
+            }, 180)
+        },
+        setTemporalLayer:function(id, visible){
+            if(!this.map) return
+            if(!visible){
+                const layer = this.temporalLayerInstances[id]
+                if(layer) this.map.removeLayer(layer)
+                delete this.temporalLayerInstances[id]
+                delete this.temporalLayerStatus[id]
+                if(this.temporalHoverInfo && this.temporalHoverInfo.layerId.split(',').includes(id)) this.temporalHoverInfo = null
+                return
+            }
+            this.loadTemporalLayer(id, false)
+        },
+        setTemporalLayerColorVisibility:function(id, visible){
+            this.temporalLayerColorVisibility[id] = visible
+            const layer = this.temporalLayerInstances[id]
+            if(layer && layer.setVisible) layer.setVisible(visible)
+        },
+        setTemporalHoverGroup:function(group){
+            this.temporalHoverGroup = group
+            this.temporalHoverInfo = null
+        },
+        loadTemporalLayer:async function(id, replace){
+            if(!this.map) return
+            const previous = this.temporalLayerInstances[id]
+            if(previous && !replace) return
+            if(previous) this.map.removeLayer(previous)
+            this.temporalLayerStatus[id] = 'loading'
+            const root = '/data/temporal/'
+            const year = this.temporalYear
+            const month = String(this.temporalMonth).padStart(2, '0')
+            const baseVector = (file, zIndex, style) => new VectorLayer({
+                source: new VectorSource({
+                    url: root + file,
+                    format: new GeoJSON(),
+                    projection: 'EPSG:4326'
+                }),
+                style,
+                zIndex
+            })
+            const palette = id === 'temperature'
+                ? ['#3155a5', '#479bc2', '#91c994', '#f0d56a', '#e87946', '#a83238']
+                : ['#f6f2c1', '#c5df9b', '#68b7a3', '#4380b8', '#44377b']
+            const gridStyle = feature => {
+                const value = Number(feature.get('value'))
+                const min = id === 'temperature' ? -25 : 0
+                const max = id === 'temperature' ? 35 : 200
+                const ratio = Math.max(0, Math.min(0.999, (value - min) / (max - min)))
+                const color = palette[Math.floor(ratio * palette.length)]
+                return new Style({
+                    fill: new Fill({color: color + 'bf'}),
+                    stroke: new Stroke({color: 'rgba(255,255,255,.4)', width: .5})
+                })
+            }
+            let layer
+            if(id === 'sentinel1' || id === 'sentinel2'){
+                try {
+                    const res = await axios.get(root + '04_imagery/services.json')
+                    const prefix = id === 'sentinel1' ? 'S1_' : 'S2_'
+                    const service = res.data.layers.find(item => item.id === prefix + year)
+                    if(!service) throw new Error('所选年份暂无影像配置')
+                    layer = new Tile({
+                        source: new XYZ({url: service.xyz_url, projection: 'EPSG:3857', crossOrigin: 'anonymous'}),
+                        zIndex: 5
+                    })
+                    layer.getSource().on('tileloaderror', () => { this.temporalLayerStatus[id] = 'error' })
+                    layer.getSource().on('tileloadend', () => { this.temporalLayerStatus[id] = 'ready' })
+                } catch(error) {
+                    this.temporalLayerStatus[id] = 'error'
+                    console.error('影像图层加载失败', error)
+                    return
+                }
+            } else if(id === 'temperature' || id === 'precipitation'){
+                const file = `05_weather/${year}/${id}_${year}${month}.geojson`
+                layer = baseVector(file, 12, gridStyle)
+            } else if(id === 'rivers'){
+                layer = baseVector('01_basemap/rivers.geojson', 32, new Style({stroke: new Stroke({color:'#218bb4', width:2})}))
+            } else if(id === 'lakes'){
+                layer = baseVector('01_basemap/lakes.geojson', 24, new Style({fill:new Fill({color:'rgba(55,153,198,.65)'}), stroke:new Stroke({color:'#3789b8', width:1.2})}))
+            } else if(id === 'mountains'){
+                layer = baseVector('01_basemap/mountain_ranges.geojson', 20, new Style({fill:new Fill({color:'rgba(255,145,0,.3)'}), stroke:new Stroke({color:'#e85d04', width:1.8})}))
+            } else if(id === 'boundaries'){
+                const source = new VectorSource()
+                layer = new VectorLayer({source, zIndex: 30, style: feature => new Style({
+                    stroke: new Stroke({
+                        color: feature.get('__boundaryType') === 'country' ? '#e63946' : '#f59e0b',
+                        width: feature.get('__boundaryType') === 'country' ? 2.4 : 1.7,
+                        lineDash: feature.get('__boundaryType') === 'country' ? undefined : [6, 4]
+                    })
+                })})
+                Promise.all(['country_borders', 'province_borders'].map(async name => {
+                    const res = await axios.get(`${root}02_boundaries/${name}.geojson`)
+                    const features = new GeoJSON().readFeatures(res.data, {featureProjection:'EPSG:4326'})
+                    features.forEach(feature => feature.set('__boundaryType', name === 'country_borders' ? 'country' : 'province'))
+                    source.addFeatures(features)
+                })).then(() => { this.temporalLayerStatus[id] = 'ready' }).catch(() => { this.temporalLayerStatus[id] = 'error' })
+            } else if(id === 'elevation' || id === 'slope'){
+                const image = id === 'elevation' ? 'elevation_m.png' : 'slope_deg.png'
+                layer = new ImageLayer({
+                    source: new ImageStatic({
+                        url: root + `03_terrain/${image}`,
+                        imageExtent: TEMPORAL_RASTER_EXTENT,
+                        projection: 'EPSG:4326'
+                    }),
+                    opacity: .82,
+                    zIndex: id === 'elevation' ? 3 : 4
+                })
+            } else {
+                delete this.temporalLayerStatus[id]
+                return
+            }
+            this.temporalLayerInstances[id] = markRaw(layer)
+            if(this.temporalLayerColorVisibility[id] === false) layer.setVisible(false)
+            this.map.addLayer(layer)
+            if(id === 'temperature' || id === 'precipitation'){
+                const source = layer.getSource()
+                source.once('featuresloadend', () => { this.temporalLayerStatus[id] = 'ready' })
+                source.once('featuresloaderror', () => { this.temporalLayerStatus[id] = 'error' })
+            } else if(id !== 'sentinel1' && id !== 'sentinel2' && id !== 'boundaries'){
+                this.temporalLayerStatus[id] = 'ready'
+            }
+        },
+        getTemporalRasterValue:async function(id, coordinate){
+            const file = id === 'elevation' ? 'elevation_m.tif' : 'slope_deg.tif'
+            let raster = temporalRasterCache.get(id)
+            if(!raster){
+                let loading = temporalRasterPromises.get(id)
+                if(!loading){
+                    loading = (async () => {
+                        const response = await fetch(`/data/temporal/03_terrain/${file}`)
+                        if(!response.ok) throw new Error(`无法读取 ${file}`)
+                        const tiff = await fromArrayBuffer(await response.arrayBuffer())
+                        const image = await tiff.getImage()
+                        const bands = await image.readRasters({interleave:false})
+                        return {
+                            values: bands[0],
+                            width: image.getWidth(),
+                            height: image.getHeight(),
+                            extent: image.getBoundingBox() || TEMPORAL_RASTER_EXTENT,
+                            noData: Number(image.getGDALNoData())
+                        }
+                    })()
+                    temporalRasterPromises.set(id, loading)
+                }
+                try {
+                    raster = await loading
+                    temporalRasterCache.set(id, raster)
+                } finally {
+                    temporalRasterPromises.delete(id)
+                }
+            }
+            const [x, y] = coordinate
+            const [minX, minY, maxX, maxY] = raster.extent
+            if(x < minX || x > maxX || y < minY || y > maxY) return null
+            const column = Math.min(raster.width - 1, Math.max(0, Math.floor((x - minX) / (maxX - minX) * raster.width)))
+            const row = Math.min(raster.height - 1, Math.max(0, Math.floor((maxY - y) / (maxY - minY) * raster.height)))
+            const value = Number(raster.values[row * raster.width + column])
+            return Number.isFinite(value) && Math.abs(value) < 100000 && value !== raster.noData ? value : null
+        },
+
         // 添加时间序列图层
         addTimeData:async function({year,month}){
             console.log(this.baseUrl)
@@ -502,7 +715,9 @@ const useMapStore =  defineStore('map',{
             })
 
             const cropLayer = new Tile({
-                source:source
+                source:source,
+                // 给容器带上 crop-layer 类，统计期间靠它做色相循环动画
+                className: 'ol-layer crop-layer'
             })
 
 
@@ -1335,9 +1550,13 @@ const useMapStore =  defineStore('map',{
             this.map.addLayer(this.parcelRoiMaskLayer)
             this.map.addLayer(this.parcelRoiOutlineLayer)
 
-            this.syncParcelRoi()
             this.parcelRoiState = 'applied'
+            // 先记下选区范围（统计和扫描请求都要用它），把请求发出去，
+            // 最后再裁剪图层。
+            // 反过来的话裁剪会触发一堆瓦片重载，把连接占满，扫描请求要排很久
+            this.parcelRoiExtent = boxGeometry.getExtent()
             this.refreshCropAnalysis()
+            this.syncParcelRoi()
         },
 
         // 矩形范围转成闭合的环
@@ -1419,13 +1638,19 @@ const useMapStore =  defineStore('map',{
             this.refreshCropAnalysis()
         },
 
-        // 类型编码转名称和图标。编码 4 按别名归到“其他”，
-        // 其余没有对应项的用“类型N”兜底
-        cropAnalysisTypeInfo:function(code){
-            if(code === null || code === undefined || isNaN(code)) return {name:'未知', icon:''}
-            const key = Object.prototype.hasOwnProperty.call(CROP_ANALYSIS_TYPE_ALIAS, code)
+        // 编码归一：图例只有 4 类，编码 4 属于“其他”，统一映射到图例索引 0。
+        // 统计、对比都按归一后的编码走，这样 0 和 4 会合并成同一个“其他”
+        normalizeCropType:function(code){
+            if(code === null || code === undefined || isNaN(code)) return code
+            return Object.prototype.hasOwnProperty.call(CROP_ANALYSIS_TYPE_ALIAS, code)
                 ? CROP_ANALYSIS_TYPE_ALIAS[code]
                 : code
+        },
+
+        // 类型编码转名称和图标，没有对应项的用“类型N”兜底
+        cropAnalysisTypeInfo:function(code){
+            if(code === null || code === undefined || isNaN(code)) return {name:'未知', icon:''}
+            const key = this.normalizeCropType(code)
             const info = this.cropInfo && this.cropInfo[key]
             return {
                 name: (info && info.name) || ('类型' + code),
@@ -1437,6 +1662,182 @@ const useMapStore =  defineStore('map',{
             return this.cropAnalysisTypeInfo(code).name
         },
 
+        // 地图的 DOM 容器（#mapView）。统计期间给它挂个标记类，
+        // CSS 里用 `.map-identifying .crop-layer` 选中作物图层做动画。
+        // 之所以不直接操作图层容器：OpenLayers 7 没有公开获取它的接口
+        getMapTargetElement:function(){
+            if(!this.map || !this.map.getTargetElement) return null
+            return this.map.getTargetElement() || null
+        },
+
+        // 扫描层用哪一年的作物图层
+        getCropScanLayerName:function(){
+            const years = Object.keys(this.cropAnalysisYears)
+                .map(Number).filter(y => !isNaN(y)).sort((a, b) => a - b)
+            return years.length ? this.cropAnalysisYears[years[years.length - 1]] : null
+        },
+
+        // 全流域统计结果的本地缓存（sessionStorage）
+        readCropAnalysisCache:function(){
+            try{
+                const raw = window.sessionStorage && window.sessionStorage.getItem(CROP_ANALYSIS_STORAGE_KEY)
+                if(!raw) return null
+                const parsed = JSON.parse(raw)
+                return parsed && parsed.byType ? parsed : null
+            }catch(e){
+                return null
+            }
+        },
+
+        writeCropAnalysisCache:function(result){
+            try{
+                if(window.sessionStorage){
+                    window.sessionStorage.setItem(CROP_ANALYSIS_STORAGE_KEY, JSON.stringify(result))
+                }
+            }catch(e){
+                // 存不下就算了，不影响功能
+            }
+        },
+
+        // 统计期间在框内叠一层矢量，每个地块自己随机换颜色。
+        // 之所以不用整层滤镜：那样同类地块会整齐地一起闪，一眼就假。
+        // 扫描数据单独取一次，只要框内的、有数量上限，返回很快。
+        startCropAnalysisScan:async function(extent){
+            this.stopCropAnalysisScan()
+            if(!this.map || !this.map.addLayer || !extent) return false
+            const layerName = this.getCropScanLayerName()
+            if(!layerName) return false
+
+            const reqId = ++this.cropScanReqId
+            try{
+                const url = `${this.baseUrl}/geoserver/agri-agent/ows`
+                    + `?service=WFS&version=1.0.0&request=GetFeature`
+                    + `&typeName=${layerName}`
+                    + `&outputFormat=application/json`
+                    + `&maxFeatures=${CROP_ANALYSIS_SCAN_MAX_FEATURES}`
+                    + `&bbox=${extent[0]},${extent[1]},${extent[2]},${extent[3]}`
+                const res = await axios.get(url, {timeout:20000})
+                // 请求过期，或统计已经结束不再需要闪烁，就不要往上加了
+                if(reqId !== this.cropScanReqId || !this.cropAnalysisBlinkStartedAt) return false
+                const data = res.data
+                if(typeof data === 'string' && data.trim().charAt(0) === '<') return false
+                const geojson = typeof data === 'string' ? JSON.parse(data) : data
+                const features = new GeoJSON().readFeatures(geojson, {
+                    dataProjection: 'EPSG:4326',
+                    featureProjection: this.map.getView().getProjection()
+                })
+                if(!features.length) return false
+
+                const styles = CROP_ANALYSIS_SCAN_COLORS.map(color => new Style({
+                    fill: new Fill({color}),
+                    stroke: new Stroke({color: 'rgba(255,255,255,0.45)', width: 1})
+                }))
+                const layer = new VectorLayer({
+                    source: new VectorSource({features}),
+                    // 压在选区遮罩（zIndex 900）下面。ol 7 的 layer.setExtent 只管
+                    // 图层可见性、不做渲染裁剪，摆在遮罩上面的话，
+                    // bbox 取回来那些伸到框外的色块会盖在灰色遮罩上露出来
+                    zIndex: 890,
+                    className: `ol-layer ${CROP_ANALYSIS_SCAN_CLASS}`,
+                    // 每次重绘每个地块都重新随机取一个作物颜色
+                    style: () => styles[Math.floor(Math.random() * styles.length)]
+                })
+                this.cropScanLayer = layer
+                this.map.addLayer(layer)
+                // 扫描层挂上了，整层的色调滤镜就可以摘掉
+                if(this.cropAnalysisBlinkContainer && this.cropAnalysisBlinkContainer.classList){
+                    this.cropAnalysisBlinkContainer.classList.remove(CROP_ANALYSIS_BLINK_CLASS)
+                    this.cropAnalysisBlinkContainer = null
+                }
+                this.cropScanTimer = setInterval(() => {
+                    if(this.cropScanLayer && this.cropScanLayer.changed) this.cropScanLayer.changed()
+                }, CROP_ANALYSIS_SCAN_INTERVAL)
+                return true
+            }catch(e){
+                console.warn('作物扫描层取数失败：', e && (e.message || e))
+                return false
+            }
+        },
+
+        stopCropAnalysisScan:function(){
+            this.cropScanReqId++
+            if(this.cropScanTimer){
+                clearInterval(this.cropScanTimer)
+                this.cropScanTimer = null
+            }
+            // 把所有扫描层都摘掉。闪烁期间如果又框选了一次，画面上可能不止一层，
+            // 只记着最后一层的话，剩下那层会一直留在框里，"定格"就回不到原图
+            if(this.map && this.map.getLayers && this.map.removeLayer){
+                const scanLayers = this.map.getLayers().getArray().slice().filter(layer => (
+                    layer === this.cropScanLayer
+                    || (layer && typeof layer.getClassName === 'function'
+                        && String(layer.getClassName()).indexOf(CROP_ANALYSIS_SCAN_CLASS) !== -1)
+                ))
+                scanLayers.forEach(layer => {
+                    try{ this.map.removeLayer(layer) }catch(e){console.warn(e)}
+                })
+            }
+            this.cropScanLayer = null
+        },
+
+        // 定格：摘扫描层、去掉整层滤镜、还原透明度。
+        // 正常到点、统计返回、超时兜底都走这里，所以必须可以重复调用
+        clearCropAnalysisBlink:function(){
+            if(this.cropAnalysisBlinkStopTimer){
+                clearTimeout(this.cropAnalysisBlinkStopTimer)
+                this.cropAnalysisBlinkStopTimer = null
+            }
+            if(this.cropAnalysisBlinkMaxTimer){
+                clearTimeout(this.cropAnalysisBlinkMaxTimer)
+                this.cropAnalysisBlinkMaxTimer = null
+            }
+            this.stopCropAnalysisScan()
+            // 扫描层成功挂上时会把 container 置空，这里用地图容器兜底，
+            // 保证标记类一定被摘掉，不留下一直在变的颜色
+            const target = this.cropAnalysisBlinkContainer || this.getMapTargetElement()
+            if(target && target.classList) target.classList.remove(CROP_ANALYSIS_BLINK_CLASS)
+            this.cropAnalysisBlinkContainer = null
+            // 兜底：把可能被改过的透明度还原
+            if(this.cropLayer && this.cropLayer.setOpacity) this.cropLayer.setOpacity(1)
+            this.cropAnalysisBlinkStartedAt = 0
+        },
+
+        // 统计一开始就闪起来。主体是每地块独立换色的扫描层；
+        // 万一扫描数据拿不到，退回整层的色调循环
+        startCropAnalysisBlink:async function(extent){
+            if(this.cropAnalysisBlinkStartedAt) return
+            if(!this.cropLayer) return
+            this.cropAnalysisBlinkStartedAt = Date.now()
+            // 先挂整层色调循环，保证一松手就有反馈；
+            // 扫描层数据到了会自动换成每地块独立换色
+            const target = this.getMapTargetElement()
+            if(target && target.classList){
+                this.cropAnalysisBlinkContainer = target
+                target.classList.add(CROP_ANALYSIS_BLINK_CLASS)
+            }
+            // 统计请求可能很慢（范围一大就是几十秒）。动画不等它，
+            // 到点先自己定格回原图，统计结果回来再更新面板
+            if(this.cropAnalysisBlinkMaxTimer) clearTimeout(this.cropAnalysisBlinkMaxTimer)
+            this.cropAnalysisBlinkMaxTimer = setTimeout(() => {
+                this.clearCropAnalysisBlink()
+            }, CROP_ANALYSIS_BLINK_MAX_MS)
+            await this.startCropAnalysisScan(extent)
+        },
+
+        // 停止闪烁并定格。即使结果来得很快，也保证至少闪够 1 秒
+        stopCropAnalysisBlink:function(){
+            const elapsed = this.cropAnalysisBlinkStartedAt
+                ? Date.now() - this.cropAnalysisBlinkStartedAt
+                : CROP_ANALYSIS_BLINK_MIN_MS
+            const wait = Math.max(CROP_ANALYSIS_BLINK_MIN_MS - elapsed, 0)
+            if(wait > 0){
+                if(this.cropAnalysisBlinkStopTimer) clearTimeout(this.cropAnalysisBlinkStopTimer)
+                this.cropAnalysisBlinkStopTimer = setTimeout(() => this.clearCropAnalysisBlink(), wait)
+            }else{
+                this.clearCropAnalysisBlink()
+            }
+        },
+
         // 按当前范围取数并重算。没有框选时统计整个流域，
         // 全流域那次的结果会缓存，取消框选时直接复用，不重复取数
         refreshCropAnalysis:async function(force){
@@ -1445,7 +1846,13 @@ const useMapStore =  defineStore('map',{
             const extent = isRoi ? this.parcelRoiExtent : CROP_ANALYSIS_FULL_EXTENT
             this.cropAnalysisScope = isRoi ? 'roi' : 'full'
 
+            // 内存里没有就试着从 sessionStorage 取
+            if(!isRoi && !force && !this.cropAnalysisFullResult){
+                this.cropAnalysisFullResult = this.readCropAnalysisCache()
+            }
+
             if(!isRoi && !force && this.cropAnalysisFullResult){
+                this.stopCropAnalysisBlink()
                 this.cropAnalysisExtent = extent.slice()
                 this.cropAnalysisNotice = ''
                 this.cropAnalysisResult = this.cropAnalysisFullResult
@@ -1462,8 +1869,15 @@ const useMapStore =  defineStore('map',{
             this.cropAnalysisPendingKey = pendingKey
 
             const reqId = ++this.cropAnalysisReqId
+            // loading 要在扫描层取数之前就置上：那一段也属于"统计中"，
+            // 不置的话面板会继续显示上一次的结果，看起来像已经出结果了
             this.cropAnalysisLoading = true
             this.cropAnalysisNotice = ''
+
+            // 先把扫描层准备好再去取统计。两个请求并行的话，
+            // 扫描常常因为统计先回来而被取消，动画就看不到了；
+            // 扫描请求很小（有数量上限），正常一两秒内就绪。
+            if(isRoi) await this.startCropAnalysisBlink(extent)
             try{
                 const years = Object.keys(this.cropAnalysisYears).map(Number).filter(y => !isNaN(y)).sort((a, b) => a - b)
                 const records = []
@@ -1496,19 +1910,27 @@ const useMapStore =  defineStore('map',{
                         records.push({
                             year,
                             parcel: parcel === undefined || parcel === null ? null : String(parcel),
-                            type: Number(readFeatureProperty(props, CROP_ANALYSIS_TYPE_FIELD)),
+                            // 归一后的编码：0 和 4 都会变成 0，合并进同一个“其他”
+                            type: this.normalizeCropType(
+                                Number(readFeatureProperty(props, CROP_ANALYSIS_TYPE_FIELD))
+                            ),
                             area: Number(readFeatureProperty(props, CROP_ANALYSIS_AREA_FIELD)) || 0
                         })
                     })
                 }
                 if(reqId !== this.cropAnalysisReqId) return
-                this.cropAnalysisYearsLoaded = loadedYears
-                this.cropAnalysisExtent = extent.slice()
                 const result = this.computeCropAnalysis(records, extent, loadedYears)
                 result.loadedYears = loadedYears
+                // 全流域的结果先落缓存，即使这次请求已经被新请求取代也要留下，
+                // 否则取消框选后又要重新算一遍整个流域
+                if(!isRoi){
+                    this.cropAnalysisFullResult = result
+                    this.writeCropAnalysisCache(result)
+                }
+                if(reqId !== this.cropAnalysisReqId) return
+                this.cropAnalysisYearsLoaded = loadedYears
+                this.cropAnalysisExtent = extent.slice()
                 this.cropAnalysisResult = result
-                // 全流域的结果缓存起来
-                if(!isRoi) this.cropAnalysisFullResult = result
             }catch(e){
                 console.warn('作物结构分析取数失败：', e && (e.message || e))
                 this.cropAnalysisResult = null
@@ -1517,6 +1939,7 @@ const useMapStore =  defineStore('map',{
                 if(reqId === this.cropAnalysisReqId){
                     this.cropAnalysisLoading = false
                     this.cropAnalysisPendingKey = ''
+                    this.stopCropAnalysisBlink()
                 }
             }
         },
@@ -2186,6 +2609,110 @@ addBasinLabelLayer: function() {
             })
             this.map = markRaw(map)
             
+            // 时空数据面板的悬停取值：按当前类别只查已勾选的图层。
+            // 隐藏地图色块时仍然从已加载的数据源读值，提示内容不受显示状态影响。
+            let hoverRequestId = 0
+            map.on('pointermove', event => {
+                if(event.dragging) return
+                const requestId = ++hoverRequestId
+                const pointer = event.originalEvent
+                const position = {left:pointer.clientX, top:pointer.clientY}
+                const groupIds = {
+                    imagery: ['sentinel2', 'sentinel1'],
+                    weather: ['temperature', 'precipitation'],
+                    base: ['rivers', 'lakes', 'mountains', 'boundaries', 'elevation', 'slope']
+                }
+                const activeIds = (groupIds[this.temporalHoverGroup] || []).filter(id => this.temporalLayerInstances[id])
+                if(!activeIds.length){
+                    this.temporalHoverInfo = null
+                    return
+                }
+                const featureByLayer = {}
+                map.forEachFeatureAtPixel(event.pixel, (feature, layer) => {
+                    const id = Object.keys(this.temporalLayerInstances).find(key => this.temporalLayerInstances[key] === layer)
+                    if(id && activeIds.includes(id) && !featureByLayer[id]) featureByLayer[id] = feature
+                }, {
+                    hitTolerance: 5,
+                    layerFilter: layer => activeIds.some(id => this.temporalLayerInstances[id] === layer)
+                })
+                // 隐藏地图色块时仍从已加载的矢量数据源读取鼠标位置对应的数据，保证提示值不受显示状态影响。
+                activeIds.forEach(id => {
+                    const layer = this.temporalLayerInstances[id]
+                    if(featureByLayer[id] || !layer || layer.getVisible()) return
+                    const source = layer.getSource && layer.getSource()
+                    const features = source && source.getFeaturesAtCoordinate
+                        ? source.getFeaturesAtCoordinate(event.coordinate)
+                        : []
+                    if(features && features.length) featureByLayer[id] = features[0]
+                })
+                const items = []
+                const labels = {
+                    temperature:'气温', precipitation:'降水量', rivers:'河流', lakes:'湖泊',
+                    mountains:'山系/高地', boundaries:'行政边界'
+                }
+                const translated = {
+                    'Tien Shan':'天山山脉', 'Tian Shan':'天山山脉', 'Borohoro Mountains':'博罗科努山脉',
+                    'Alataw Mountains':'阿拉套山脉', 'Tarbagatai Mountains':'塔尔巴哈台山脉',
+                    'Altai Mountains':'阿尔泰山脉', 'Kazakh Uplands':'哈萨克丘陵',
+                    'Lake Balkhash':'巴尔喀什湖', 'Balkhash':'巴尔喀什湖', 'Ili':'伊犁河', 'Ile':'伊犁河'
+                }
+                activeIds.forEach(id => {
+                    const feature = featureByLayer[id]
+                    if(!feature || id === 'elevation' || id === 'slope') return
+                    const get = name => readFeatureProperty(feature.getProperties(), name)
+                    if(id === 'temperature' || id === 'precipitation'){
+                        const value = Number(get('value'))
+                        const unit = get('units') || (id === 'temperature' ? '°C' : 'mm/月')
+                        const month = String(get('month') || '')
+                        const dateLabel = month.length === 6 ? ` · ${month.slice(0, 4)}年${Number(month.slice(4))}月` : ''
+                        items.push({id, label:labels[id], value:`${Number.isFinite(value) ? value.toFixed(2) : '无数据'} ${unit}${dateLabel}`})
+                        return
+                    }
+                    let name = get('name_zh') || get('NAME_ZH') || get('name_zht') || get('NAME_ZHT') || get('name_en') || get('NAME_EN') || get('name') || get('NAME') || get('label') || get('LABEL')
+                    if(name && translated[name]) name = translated[name]
+                    if(id === 'boundaries'){
+                        const leftName = get('NAME_L') || get('ADM0_LEFT')
+                        const rightName = get('NAME_R') || get('ADM0_RIGHT')
+                        name = leftName && rightName ? `${leftName} / ${rightName} 边界` : name || get('ADM0_NAME') || '国家/省级边界'
+                    }
+                    items.push({id, label:labels[id], value:name || '名称未提供'})
+                })
+                const rasterIds = activeIds.filter(id => id === 'elevation' || id === 'slope')
+                const [minX, minY, maxX, maxY] = TEMPORAL_RASTER_EXTENT
+                const [x, y] = event.coordinate
+                const inRasterBounds = x >= minX && x <= maxX && y >= minY && y <= maxY
+                const rasterItemIds = rasterIds.filter(id => inRasterBounds)
+                if(rasterItemIds.length){
+                    rasterItemIds.forEach(id => items.push({id, label:id === 'elevation' ? '高程' : '坡度', value:'正在读取像元…'}))
+                }
+                if(!items.length){
+                    this.temporalHoverInfo = null
+                    return
+                }
+                const title = this.temporalHoverGroup === 'weather' ? '气象数据' : this.temporalHoverGroup === 'base' ? '基础图层' : '时空数据'
+                this.temporalHoverInfo = { ...position, title, items, layerId:items.map(item => item.id).join(',') }
+                if(rasterItemIds.length){
+                    Promise.all(rasterItemIds.map(id => this.getTemporalRasterValue(id, event.coordinate))).then(values => {
+                        if(requestId !== hoverRequestId || !rasterItemIds.every(id => this.temporalLayerInstances[id])) return
+                        const current = this.temporalHoverInfo
+                        if(!current) return
+                        const rasterValues = Object.fromEntries(rasterItemIds.map((id, index) => [id, values[index]]))
+                        current.items = current.items.map(item => {
+                            if(!Object.prototype.hasOwnProperty.call(rasterValues, item.id)) return item
+                            const value = rasterValues[item.id]
+                            return { ...item, value:value === null ? '无有效像元' : item.id === 'elevation' ? `${value.toFixed(1)} 米` : `${value.toFixed(2)}°` }
+                        })
+                    }).catch(error => {
+                        if(requestId !== hoverRequestId || !this.temporalHoverInfo) return
+                        console.warn('读取地形像元失败', error)
+                        this.temporalHoverInfo.items = this.temporalHoverInfo.items.map(item => rasterItemIds.includes(item.id) ? { ...item, value:'数值读取失败' } : item)
+                    })
+                }
+            })
+            map.getTargetElement().addEventListener('pointerleave', () => {
+                hoverRequestId += 1
+                this.temporalHoverInfo = null
+            })
         },
         compare:function(map){
             console.log(map===this.map)

@@ -1,5 +1,10 @@
 <template>
-  <section class="ca-panel">
+  <section class="ca-panel" ref="panel" :style="panelStyle">
+    <!-- 拖动把手 -->
+    <div class="ca-bar" @pointerdown="startDrag">
+      <span class="ca-grip" aria-hidden="true"></span>
+      <span class="ca-bar-title">作物结构分析</span>
+    </div>
     <div class="ca-tabs">
       <button
         v-for="tab in tabs"
@@ -119,8 +124,10 @@
 import { computed, ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import useMapStore from '@/stores/map'
+import { usePanelDrag } from '@/composables/usePanelDrag'
 
 const store = useMapStore()
+const { panel, panelStyle, startDrag } = usePanelDrag()
 const {
   cropAnalysisResult,
   cropAnalysisLoading,
@@ -158,28 +165,55 @@ onMounted(() => {
   top: 112px;
   right: 20px;
   z-index: 1150;
-  width: 272px;
-  max-height: calc(100vh - 320px);
+  width: 380px;
+  /* 默认高度避开右下角的图例卡片，内容多了内部滚动 */
+  max-height: calc(100vh - 380px);
   display: flex;
   flex-direction: column;
   background-color: #ffffff;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   color: #22303f;
-  font-size: 12px;
+  font-size: 15px;
+}
+
+/* 拖动把手 */
+.ca-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  padding: 8px 16px 0;
+  cursor: move;
+  touch-action: none;
+}
+
+.ca-grip {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  background-image: radial-gradient(#a9b8cc 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.ca-bar-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a56c4;
+  white-space: nowrap;
 }
 
 .ca-tabs {
   display: flex;
-  gap: 4px;
-  padding: 8px 10px 0;
+  gap: 6px;
+  padding: 8px 16px 0;
 }
 
 .ca-tab {
   flex: 1 1 0;
-  padding: 6px 4px;
+  padding: 9px 6px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 15px;
   white-space: nowrap;
   color: #1a56c4;
   background-color: #eef4fd;
@@ -194,18 +228,20 @@ onMounted(() => {
 }
 
 .ca-body {
-  padding: 8px 12px 12px;
+  padding: 10px 16px 16px;
   overflow-y: auto;
 }
 
 .ca-hint {
-  margin: 6px 0;
+  margin: 8px 0;
   color: #8494a8;
+  line-height: 1.5;
 }
 
 .ca-scope {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: #55637a;
+  line-height: 1.5;
 }
 
 .ca-scope b {
@@ -218,7 +254,7 @@ onMounted(() => {
 }
 
 .ca-warn {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: #d08700;
 }
 
@@ -226,8 +262,8 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
-  padding: 3px 0;
+  gap: 12px;
+  padding: 5px 0;
   color: #55637a;
 }
 
@@ -238,9 +274,10 @@ onMounted(() => {
 }
 
 .ca-sub {
-  margin: 10px 0 4px;
-  padding-top: 8px;
+  margin: 14px 0 6px;
+  padding-top: 12px;
   border-top: 1px solid #eaf0f8;
+  font-size: 16px;
   font-weight: 600;
   color: #1a56c4;
 }
@@ -248,18 +285,18 @@ onMounted(() => {
 .ca-type {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 0;
+  gap: 9px;
+  padding: 5px 0;
 }
 
 .ca-icon {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
 }
 
 .ca-swatch {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   border-radius: 3px;
   background-color: #c7ced8;
 }
@@ -285,20 +322,21 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin: 4px 0 8px;
+  gap: 6px;
+  margin: 6px 0 10px;
 }
 
 .ca-node {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 6px;
   background-color: #eef4fd;
 }
 
 .ca-node b {
+  font-size: 16px;
   color: #1a56c4;
 }
 
@@ -312,14 +350,14 @@ onMounted(() => {
 }
 
 .ca-tip {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: #8494a8;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-all;
 }
 
 .ca-tip code {
-  font-size: 11px;
+  font-size: 13px;
   color: #1a56c4;
 }
 </style>

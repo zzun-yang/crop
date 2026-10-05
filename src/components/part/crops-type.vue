@@ -1,6 +1,8 @@
 <template>
-  <div id="landType">
-    <div class="landUse_p1">
+  <div id="landType" ref="panel" :style="panelStyle">
+    <!-- 这一条同时是标题和拖动把手 -->
+    <div class="landUse_p1" @pointerdown="startDrag">
+      <span class="legend-grip" aria-hidden="true"></span>
       <span class="legend-title">作物类型</span>
     </div>
     <div class="landUse_p2" id="landUse_p2">
@@ -30,10 +32,12 @@
 import useMapStore from "@/stores/map";
 import {ref, getCurrentInstance, onMounted} from "vue";
 import {storeToRefs} from "pinia";
+import {usePanelDrag} from "@/composables/usePanelDrag";
 
     let pageInstance = getCurrentInstance();
     let store = useMapStore()
     const {cropInfo} = storeToRefs(store)
+    const {panel, panelStyle, startDrag} = usePanelDrag()
 
     // 初始化
     const initCropLayers = () => {
@@ -84,7 +88,8 @@ import {storeToRefs} from "pinia";
 <style scoped>
 /* 白底小窗口，钉在页面右下角，各类型竖着排一列 */
 #landType {
-  position: absolute;
+  /* 必须用 fixed：拖动时写的是视口坐标，absolute 会相对 #bottom_right 偏移 */
+  position: fixed;
   right: 20px;
   bottom: 28px;
   left: auto;
@@ -92,27 +97,39 @@ import {storeToRefs} from "pinia";
   transform: none;
   width: auto;
   height: auto;
-  padding: 9px 14px 11px;
+  padding: 11px 18px 14px;
   box-sizing: border-box;
   background-color: #ffffff;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   color: #22303f;
+  font-size: 15px;
+  user-select: none;
 }
 
 .landUse_p1 {
   position: static;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
   width: auto;
   height: auto;
-  margin-bottom: 8px;
+  margin-bottom: 11px;
   text-align: left;
+  cursor: move;
+  touch-action: none;
+}
+
+.legend-grip {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  background-image: radial-gradient(#a9b8cc 1px, transparent 1px);
+  background-size: 4px 4px;
 }
 
 .legend-title {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
   color: #1a56c4;
@@ -126,7 +143,7 @@ import {storeToRefs} from "pinia";
 #legend-container {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 9px;
   margin: 0;
 }
 
@@ -137,14 +154,14 @@ import {storeToRefs} from "pinia";
 }
 
 .crop-color {
-  width: 18px;
-  height: 18px;
-  margin-right: 7px;
+  width: 26px;
+  height: 26px;
+  margin-right: 10px;
   transition: opacity 0.2s ease;
 }
 
 .crop-name {
-  font-size: 12px;
+  font-size: 15px;
   white-space: nowrap;
   color: #22303f;
 }

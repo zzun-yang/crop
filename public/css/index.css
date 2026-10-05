@@ -363,3 +363,26 @@ body {
     background-color: rgb(191, 238, 255);
     border-radius: 10%;
 }
+
+/* 统计期间作物图层的颜色循环，看起来像在逐块识别作物。
+   map-identifying 由 map.js 在统计开始时挂上、结束时摘掉。
+   只在调色板原有的 黄 / 灰 / 绿（原色）之间来回，不做整圈色相旋转，
+   免得出现品红、青色这类图例里没有的颜色 */
+.map-identifying .crop-layer {
+    animation: cropIdentifyTone 0.9s linear infinite;
+}
+
+@keyframes cropIdentifyTone {
+    0% {
+        filter: none;
+    }
+    33% {
+        filter: sepia(0.8) saturate(2.8) brightness(1.1);
+    }
+    66% {
+        filter: grayscale(1) brightness(1.15);
+    }
+    100% {
+        filter: none;
+    }
+}
