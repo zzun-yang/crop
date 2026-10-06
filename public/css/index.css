@@ -6,11 +6,17 @@ body {
 }
 
 #mapView {
-    /* 顶部留出 56px 给模块导航条，其余空间都给地图 */
-    height: calc(100% - 56px);
+    /* 顶部留出顶栏（+ 二级导航条）的高度，其余空间都给地图 */
+    height: calc(100% - var(--header-h));
     width: 100%;
     position:absolute;
-    top:56px;
+    top: var(--header-h);
+}
+
+/* 有二级导航条的页面，地图再往下让出 --tabs-h */
+html.with-module-tabs #mapView {
+    top: calc(var(--header-h) + var(--tabs-h));
+    height: calc(100% - var(--header-h) - var(--tabs-h));
 }
 
 #bottom {
@@ -385,4 +391,381 @@ body {
     100% {
         filter: none;
     }
+}
+
+/* ==========================================================================
+   平台外壳（照 figma 原型：深蓝顶栏 + 白色二级导航条 + 地图浮层控件）
+   颜色与尺寸取自原型的计算样式
+   ========================================================================== */
+
+:root {
+    --header-h: 64px;
+    --tabs-h: 54px;
+    --brand-900: #063375;
+    --brand-700: #075fc4;
+    --brand-500: #156ee4;
+    --brand-400: #2c93ff;
+    --brand-300: #56d5ff;
+    --ink-900: #102b56;
+    --ink-700: #123e7d;
+    --ink-500: #164f9a;
+    --ink-300: #7890aa;
+    --panel-bg: rgba(255, 255, 255, 0.97);
+    --panel-radius: 10px;
+    --panel-shadow: 0 6px 20px rgba(6, 34, 84, 0.18);
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+    padding: 0 18px 0 24px;
+    box-sizing: border-box;
+    color: #fff;
+    background-image: linear-gradient(105deg, #063375 0%, #075fc4 55%, #0a7ae0 100%);
+    box-shadow: 0 2px 8px rgba(0, 26, 63, 0.3);
+    pointer-events: auto;
+}
+
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.topbar-logo {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    color: #7ddcff;
+}
+
+.topbar-title {
+    margin: 0;
+    overflow: hidden;
+    color: #fff;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.topbar-menu {
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    margin: 0 auto;
+    flex: 0 0 auto;
+}
+
+.topbar-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 116px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.82);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.topbar-item svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.topbar-item:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.topbar-item.active {
+    color: #fff;
+    background-image: linear-gradient(#2c93ff, #156ee4);
+    box-shadow: inset 0 -3px 0 0 var(--brand-300);
+}
+
+.topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding-left: 16px;
+    color: #fff;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.topbar-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.topbar-avatar svg {
+    width: 17px;
+    height: 17px;
+}
+
+.topbar-caret {
+    width: 12px;
+    height: 12px;
+    opacity: 0.8;
+}
+
+/* ---------- 二级导航条 ---------- */
+.module-tabs {
+    position: fixed;
+    top: var(--header-h);
+    left: 0;
+    right: 0;
+    z-index: 1100;
+    height: var(--tabs-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-sizing: border-box;
+    background-color: #fff;
+    border-bottom: 1px solid #e4ecf7;
+    box-shadow: 0 2px 6px rgba(10, 40, 90, 0.06);
+    pointer-events: auto;
+}
+
+.module-tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 18px;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink-900);
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.module-tab svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+}
+
+.module-tab:hover {
+    background-color: #eef4fd;
+}
+
+.module-tab.active {
+    color: #fff;
+    font-weight: 600;
+    background-image: linear-gradient(#2c93ff, #156ee4);
+    box-shadow: 0 2px 8px rgba(21, 110, 228, 0.35);
+}
+
+/* ---------- 地图浮层控件 ---------- */
+.map-tools {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.map-tool {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-500);
+    background-color: var(--panel-bg);
+    border: 0;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(6, 34, 84, 0.22);
+    cursor: pointer;
+}
+
+.map-tool:hover {
+    color: var(--brand-500);
+}
+
+.map-tool.primary {
+    width: 46px;
+    color: #fff;
+    font-size: 14px;
+    background-image: linear-gradient(#2c93ff, #156ee4);
+    box-shadow: 0 2px 10px rgba(21, 110, 228, 0.45);
+}
+
+.map-tool svg {
+    width: 18px;
+    height: 18px;
+}
+
+.map-compass {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 1000;
+    width: 46px;
+    height: 46px;
+    color: #fff;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    pointer-events: none;
+}
+
+.map-scalebar {
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    z-index: 1000;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    color: #fff;
+    font-size: 11px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+    pointer-events: none;
+}
+
+.map-scalebar-bar {
+    width: 72px;
+    height: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-top: 0;
+}
+
+/* ---------- 底部时间轴小白条 ---------- */
+.bottom-pill {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: min(880px, calc(100vw - 60px));
+    padding: 10px 20px;
+    box-sizing: border-box;
+    color: var(--ink-900);
+    background-color: rgba(255, 255, 255, 0.97);
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(6, 34, 84, 0.22);
+    pointer-events: auto;
+}
+
+/* ---------- 通用浮层面板 ---------- */
+.float-panel {
+    background-color: var(--panel-bg);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    color: var(--ink-900);
+}
+
+/* 地图自带的缩放/旋转控件藏掉，改用右侧统一工具条 */
+#mapView .ol-zoom,
+#mapView .ol-rotate,
+#mapView .ol-attribution {
+    display: none !important;
+}
+
+.map-tool.is-on {
+    color: #fff;
+    background-image: linear-gradient(#2c93ff, #156ee4);
+}
+
+/* 交互识别二级模块的小面板（农业地块 / 作物结构共用） */
+.ident-panel {
+    position: fixed;
+    top: calc(var(--header-h) + var(--tabs-h) + 11px);
+    left: 11px;
+    z-index: 1000;
+    width: 256px;
+    pointer-events: auto;
+}
+
+.ident-body {
+    padding: 2px 15px 14px;
+}
+
+.ident-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    color: #fff;
+    background-image: linear-gradient(#2c93ff, #156ee4);
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ident-btn.on {
+    background-image: linear-gradient(#ffb74d, #f08c1a);
+}
+
+.ident-hint {
+    margin: 10px 0 0;
+    color: var(--ink-300);
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+/* 和左侧统计面板同时出现时，框选入口挪到左下角，避免压在一起 */
+.ident-panel--bottom {
+    top: auto;
+    /* 日期时间轴那一条比较高，这里要留够位置 */
+    bottom: 150px;
+    width: 224px;
+}
+
+.panel-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 45px;
+    padding: 0 12px 0 15px;
+    box-sizing: border-box;
+    color: var(--ink-700);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.panel-heading svg {
+    width: 17px;
+    height: 17px;
 }

@@ -1,153 +1,139 @@
 <template>
-  <div ref="panel" class="ts-panel" :style="panelStyle">
-    <div class="ts-bar" @pointerdown="startDrag">
-      <span class="ts-grip" aria-hidden="true"></span>
-      <span class="ts-title">时空数据时间轴</span>
-      <span class="ts-state">{{ currentYear }}年 {{ pad(currentMonth) }}月</span>
-    </div>
-    <div class="ts-body">
-      <button class="ts-play" :title="isPlaying ? '暂停' : '播放'" @click="togglePlay">
-        <img :src="isPlaying ? '/img/24gl-pause2.png' : '/img/24gl-play.png'" alt="">
+  <div class="bottom-pill ts-pill">
+    <span class="ts-pill-label">年份</span>
+
+    <div class="ts-years">
+      <div class="ts-line"></div>
+      <button
+        v-for="item in stops"
+        :key="item.year"
+        type="button"
+        class="ts-stop"
+        :class="{ active: item.year === year }"
+        :style="{ left: item.left }"
+        :title="item.year + ' 年'"
+        @click="pickYear(item.year)"
+      >
+        <span class="ts-dot"></span>
+        <span class="ts-year">{{ item.year }}</span>
       </button>
-      <input class="ts-range" type="range" min="0" :max="totalMonths - 1" step="1" :value="monthIndex" @input="onSlide">
-      <input class="ts-date" type="date" :min="minDate" :max="maxDate" :value="selectedDate" @change="onPickDate">
     </div>
-    <div class="ts-ticks" ref="ticksRef">
-      <span v-for="tick in ticks" :key="tick.year" :style="{ left: tick.left }">{{ tick.year }}</span>
-    </div>
+
+    <label class="ts-month">
+      <span>月份</span>
+      <select :value="month" @change="pickMonth(Number($event.target.value))">
+        <option v-for="m in 12" :key="m" :value="m">{{ m }} 月</option>
+      </select>
+    </label>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import useMapStore from '@/stores/map'
 
-const YEAR_MIN = 2024
-const YEAR_MAX = 2026
-const LAST_MONTH = 8
-const totalMonths = (YEAR_MAX - YEAR_MIN) * 12 + LAST_MONTH
 const store = useMapStore()
-store.removeCropLayerLine()
-store.removeAdministrativeLayer()
-store.removeCropImageryLayers()
-store.removeClick()
-store.isShowFeautureInfo = false
+const { temporalYear, temporalMonth } = storeToRefs(store)
 
-const monthIndex = ref(5) // 数据包中 Sentinel 影像从每年 6 月起提供
-const isPlaying = ref(false)
-const selectedDate = ref('2024-06-01')
-const currentYear = computed(() => YEAR_MIN + Math.floor(monthIndex.value / 12))
-const currentMonth = computed(() => monthIndex.value % 12 + 1)
-const pad = value => String(value).padStart(2, '0')
-const minDate = `${YEAR_MIN}-01-01`
-const maxDate = `${YEAR_MAX}-${pad(LAST_MONTH)}-31`
-const ticks = computed(() => Array.from({ length: YEAR_MAX - YEAR_MIN + 1 }, (_, i) => ({
-  year: YEAR_MIN + i,
-  left: `${(i * 12 / (totalMonths - 1)) * 100}%`
+const YEARS = [2024, 2025, 2026]
+
+const year = computed(() => Number(temporalYear.value))
+const month = computed(() => Number(temporalMonth.value))
+const stops = computed(() => YEARS.map((value, index) => ({
+  year: value,
+  left: `${(index / (YEARS.length - 1)) * 100}%`
 })))
 
-watch(monthIndex, index => {
-  const year = YEAR_MIN + Math.floor(index / 12)
-  const month = index % 12 + 1
-  store.setTemporalPeriod({ year, month })
-})
-
-const syncDateToIndex = index => {
-  const year = YEAR_MIN + Math.floor(index / 12)
-  const month = index % 12 + 1
-  selectedDate.value = `${year}-${pad(month)}-01`
-}
-const onSlide = event => {
-  monthIndex.value = Number(event.target.value)
-  syncDateToIndex(monthIndex.value)
-}
-const onPickDate = event => {
-  if (!event.target.value) return
-  const [year, month] = event.target.value.split('-').map(Number)
-  selectedDate.value = event.target.value
-  monthIndex.value = Math.min(totalMonths - 1, Math.max(0, (year - YEAR_MIN) * 12 + month - 1))
-}
-
-let playTimer = null
-const stopPlay = () => {
-  if (playTimer) clearInterval(playTimer)
-  playTimer = null
-  isPlaying.value = false
-}
-const togglePlay = () => {
-  if (isPlaying.value) return stopPlay()
-  isPlaying.value = true
-  playTimer = setInterval(() => {
-    monthIndex.value = monthIndex.value >= totalMonths - 1 ? 0 : monthIndex.value + 1
-    syncDateToIndex(monthIndex.value)
-  }, 2000)
-}
-
-const panel = ref(null)
-const pos = ref(null)
-const panelStyle = computed(() => pos.value
-  ? { left: `${pos.value.left}px`, top: `${pos.value.top}px`, bottom: 'auto', transform: 'none' }
-  : null)
-let grabOffset = { x: 0, y: 0 }
-const onPointerMove = event => {
-  const el = panel.value
-  if (!el || !pos.value) return
-  const maxLeft = Math.max(window.innerWidth - el.offsetWidth - 4, 4)
-  const maxTop = Math.max(window.innerHeight - el.offsetHeight - 4, 4)
-  pos.value = {
-    left: Math.min(Math.max(event.clientX - grabOffset.x, 4), maxLeft),
-    top: Math.min(Math.max(event.clientY - grabOffset.y, 4), maxTop)
-  }
-}
-const endDrag = () => {
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerup', endDrag)
-}
-const startDrag = event => {
-  if (event.button !== 0) return
-  const el = panel.value
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  grabOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-  pos.value = { left: rect.left, top: rect.top }
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', endDrag)
-  event.preventDefault()
-}
-onMounted(() => store.setTemporalPeriod({ year: currentYear.value, month: currentMonth.value }))
-onBeforeUnmount(() => { stopPlay(); endDrag() })
+const pickYear = value => store.setTemporalPeriod({ year: value, month: month.value })
+const pickMonth = value => store.setTemporalPeriod({ year: year.value, month: value })
 </script>
 
 <style scoped>
-.ts-panel {
-  position: fixed;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
-  z-index: 1200;
-  width: min(400px, calc(100vw - 32px));
-  padding: 5px 10px 7px;
-  box-sizing: border-box;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .28);
-  color: #22303f;
-  font-size: 12px;
-  user-select: none;
-  pointer-events: auto;
+.ts-pill {
+  padding: 8px 22px 6px;
+  gap: 20px;
 }
-.ts-bar { display: flex; align-items: center; gap: 7px; height: 18px; cursor: move; touch-action: none; }
-.ts-grip { flex: 0 0 auto; width: 10px; height: 10px; background-image: radial-gradient(#a9b8cc 1px, transparent 1px); background-size: 4px 4px; }
-.ts-title { color: #1a56c4; font-weight: 600; white-space: nowrap; }
-.ts-state { margin-left: auto; overflow: hidden; color: #8494a8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.ts-body { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
-.ts-play { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: #1a73e8; cursor: pointer; }
-.ts-play img { display: block; width: 12px; height: 12px; filter: brightness(0) invert(1); }
-.ts-range { flex: 1 1 auto; min-width: 0; height: 4px; appearance: none; border: 0; border-radius: 2px; outline: none; background: #d6e2f5; cursor: pointer; }
-.ts-range::-webkit-slider-thumb { width: 14px; height: 14px; appearance: none; border: 2px solid #fff; border-radius: 50%; background: #1a73e8; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-.ts-range::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; background: #1a73e8; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-.ts-date { flex: 0 0 auto; width: 112px; padding: 1px 4px; border: 1px solid #cfdae8; border-radius: 4px; background: #f4f7fb; color: #22303f; font-family: inherit; font-size: 12px; }
-.ts-ticks { position: relative; height: 13px; margin: 2px 120px 0 28px; color: #8494a8; font-size: 10px; }
-.ts-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-@media (max-width: 520px) { .ts-panel { bottom: 12px; } }
+
+.ts-pill-label {
+  flex: 0 0 auto;
+  color: var(--ink-300);
+  font-size: 12px;
+}
+
+.ts-years {
+  position: relative;
+  flex: 1 1 auto;
+  height: 46px;
+  min-width: 0;
+}
+
+.ts-line {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background-color: #cfe0f5;
+}
+
+.ts-stop {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  transform: translateX(-50%);
+  color: var(--ink-900);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ts-dot {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--brand-400);
+  border-radius: 50%;
+  background-color: #fff;
+}
+
+.ts-year {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ts-stop.active .ts-dot {
+  border-color: var(--brand-500);
+  background-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(21, 110, 228, 0.18);
+}
+
+.ts-stop.active .ts-year {
+  color: var(--brand-500);
+  font-weight: 600;
+}
+
+.ts-month {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: var(--ink-300);
+  font-size: 12px;
+}
+
+.ts-month select {
+  padding: 3px 6px;
+  color: var(--ink-900);
+  background-color: #f4f8fd;
+  border: 1px solid #d8e5f5;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+}
 </style>

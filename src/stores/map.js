@@ -84,10 +84,41 @@ const CROP_ANALYSIS_BLINK_MAX_MS = 8000;
 const CROP_ANALYSIS_BLINK_CLASS = 'map-identifying';
 // 扫描效果：统计期间在框内叠一层矢量，每个地块独立随机换色
 const CROP_ANALYSIS_SCAN_MAX_FEATURES = 1500; // 最多覆盖多少个图斑
-const CROP_ANALYSIS_SCAN_INTERVAL = 130; // 重新上色的间隔（毫秒）
+const CROP_ANALYSIS_SCAN_INTERVAL = 600; // 重新上色的间隔（毫秒）：越慢闪得越缓
 const CROP_ANALYSIS_SCAN_CLASS = 'crop-scan-layer'; // 扫描层容器的类名，摘层时按它找
 // 四类作物在地图上的近似颜色，顺序对应图例 0-3
 const CROP_ANALYSIS_SCAN_COLORS = ['#8ab6d6', '#d9b45a', '#efe23c', '#35c65a'];
+
+// 把一圈坐标按矩形裁开（Sutherland–Hodgman）。
+// 闪烁层需要"框内的都参与、框外的一点都不露"，而 ol 的 layer.setExtent 不做渲染裁剪，
+// 所以这里直接把几何裁到选区上。
+const clipRingToBox = (ring, box) => {
+    if(!ring || ring.length < 3) return []
+    const edges = [
+        {inside: p => p[0] >= box[0], cut: (a, b) => [box[0], a[1] + (b[1] - a[1]) * (box[0] - a[0]) / (b[0] - a[0])]},
+        {inside: p => p[0] <= box[2], cut: (a, b) => [box[2], a[1] + (b[1] - a[1]) * (box[2] - a[0]) / (b[0] - a[0])]},
+        {inside: p => p[1] >= box[1], cut: (a, b) => [a[0] + (b[0] - a[0]) * (box[1] - a[1]) / (b[1] - a[1]), box[1]]},
+        {inside: p => p[1] <= box[3], cut: (a, b) => [a[0] + (b[0] - a[0]) * (box[3] - a[1]) / (b[1] - a[1]), box[3]]}
+    ]
+    let output = ring.slice()
+    edges.forEach(edge => {
+        const input = output
+        output = []
+        for(let i = 0; i < input.length; i++){
+            const current = input[i]
+            const previous = input[(i + input.length - 1) % input.length]
+            const currentIn = edge.inside(current)
+            const previousIn = edge.inside(previous)
+            if(currentIn){
+                if(!previousIn) output.push(edge.cut(previous, current))
+                output.push(current)
+            } else if(previousIn){
+                output.push(edge.cut(previous, current))
+            }
+        }
+    })
+    return output
+}
 // 没有框选时默认统计整个流域，用的是流域图层的范围
 const CROP_ANALYSIS_FULL_EXTENT = [72.4875, 42.2583, 85.0006, 49.1297];
 // 全流域那次统计很重（30 多万图斑），结果存一份到 sessionStorage，
@@ -479,6 +510,23 @@ const useMapStore =  defineStore('map',{
                 layer = baseVector('01_basemap/lakes.geojson', 24, new Style({fill:new Fill({color:'rgba(55,153,198,.65)'}), stroke:new Stroke({color:'#3789b8', width:1.2})}))
             } else if(id === 'mountains'){
                 layer = baseVector('01_basemap/mountain_ranges.geojson', 20, new Style({fill:new Fill({color:'rgba(255,145,0,.3)'}), stroke:new Stroke({color:'#e85d04', width:1.8})}))
+            } else if(id === 'country_border' || id === 'province_border'){
+                // 原型把行政边界拆成「国家边界」「州界」两栏，这里一栏一个图层
+                const isCountry = id === 'country_border'
+                const source = new VectorSource()
+                layer = new VectorLayer({source, zIndex: isCountry ? 31 : 30, style: new Style({
+                    stroke: new Stroke({
+                        color: isCountry ? '#e63946' : '#f59e0b',
+                        width: isCountry ? 2.4 : 1.7,
+                        lineDash: isCountry ? undefined : [6, 4]
+                    })
+                })})
+                axios.get(`${root}02_boundaries/${isCountry ? 'country_borders' : 'province_borders'}.geojson`)
+                    .then(res => {
+                        source.addFeatures(new GeoJSON().readFeatures(res.data, {featureProjection:'EPSG:4326'}))
+                        this.temporalLayerStatus[id] = 'ready'
+                    })
+                    .catch(() => { this.temporalLayerStatus[id] = 'error' })
             } else if(id === 'boundaries'){
                 const source = new VectorSource()
                 layer = new VectorLayer({source, zIndex: 30, style: feature => new Style({
@@ -516,7 +564,8 @@ const useMapStore =  defineStore('map',{
                 const source = layer.getSource()
                 source.once('featuresloadend', () => { this.temporalLayerStatus[id] = 'ready' })
                 source.once('featuresloaderror', () => { this.temporalLayerStatus[id] = 'error' })
-            } else if(id !== 'sentinel1' && id !== 'sentinel2' && id !== 'boundaries'){
+            } else if(id !== 'sentinel1' && id !== 'sentinel2' && id !== 'boundaries'
+                && id !== 'country_border' && id !== 'province_border'){
                 this.temporalLayerStatus[id] = 'ready'
             }
         },
@@ -1670,6 +1719,28 @@ const useMapStore =  defineStore('map',{
             return this.map.getTargetElement() || null
         },
 
+        // 识别动画（扫描闪烁 + 进度条）只在「作物结构」页出现，别处不要
+        isCropBlinkRoute:function(){
+            if(typeof window === 'undefined' || !window.location) return false
+            return String(window.location.hash || '').indexOf('cropClassification') !== -1
+        },
+
+        // 把时空数据加载的图层全部撤掉（离开时空数据页时用，
+        // 否则这些图层会跟着到农业地块 / 作物结构那边去）
+        clearTemporalLayers:function(){
+            if(this.map && this.map.removeLayer){
+                Object.keys(this.temporalLayerInstances).forEach(id => {
+                    const layer = this.temporalLayerInstances[id]
+                    if(layer){
+                        try{ this.map.removeLayer(layer) }catch(e){console.warn(e)}
+                    }
+                })
+            }
+            this.temporalLayerInstances = {}
+            this.temporalLayerStatus = {}
+            this.temporalHoverInfo = null
+        },
+
         // 扫描层用哪一年的作物图层
         getCropScanLayerName:function(){
             const years = Object.keys(this.cropAnalysisYears)
@@ -1726,14 +1797,41 @@ const useMapStore =  defineStore('map',{
                     dataProjection: 'EPSG:4326',
                     featureProjection: this.map.getView().getProjection()
                 })
-                if(!features.length) return false
+                // 把地块按选区裁开：只要跟选区有交集的都参与闪烁（框边上的也不例外），
+                // 框外的部分被裁掉，一点都不会露出来
+                const clipped = []
+                features.forEach(feature => {
+                    const geometry = feature.getGeometry && feature.getGeometry()
+                    if(!geometry) return
+                    const polygons = geometry.getType() === 'MultiPolygon'
+                        ? geometry.getCoordinates()
+                        : [geometry.getCoordinates()]
+                    const featureType = readFeatureProperty(feature.getProperties(), CROP_ANALYSIS_TYPE_FIELD)
+                    polygons.forEach(polygon => {
+                        const ring = clipRingToBox(polygon && polygon[0], extent)
+                        if(ring.length < 4) return
+                        const piece = new Feature(new Polygon([ring]))
+                        // 保留作物编码，后面按"选区里真实出现过的类型"取色要用
+                        if(featureType !== undefined) piece.set(CROP_ANALYSIS_TYPE_FIELD, featureType)
+                        clipped.push(piece)
+                    })
+                })
+                if(!clipped.length) return false
 
-                const styles = CROP_ANALYSIS_SCAN_COLORS.map(color => new Style({
+                // 只用在选区内真实出现过的作物类型对应的颜色，
+                // 闪出来的一定是这片区域本来就有的颜色，不引入新颜色
+                const presentTypes = new Set(clipped.map(feature => this.normalizeCropType(
+                    Number(readFeatureProperty(feature.getProperties(), CROP_ANALYSIS_TYPE_FIELD))
+                )))
+                const scanColors = CROP_ANALYSIS_SCAN_COLORS
+                    .filter((color, index) => presentTypes.has(index))
+                const palette = scanColors.length ? scanColors : CROP_ANALYSIS_SCAN_COLORS
+                const styles = palette.map(color => new Style({
                     fill: new Fill({color}),
                     stroke: new Stroke({color: 'rgba(255,255,255,0.45)', width: 1})
                 }))
                 const layer = new VectorLayer({
-                    source: new VectorSource({features}),
+                    source: new VectorSource({features: clipped}),
                     // 压在选区遮罩（zIndex 900）下面。ol 7 的 layer.setExtent 只管
                     // 图层可见性、不做渲染裁剪，摆在遮罩上面的话，
                     // bbox 取回来那些伸到框外的色块会盖在灰色遮罩上露出来
@@ -1877,7 +1975,8 @@ const useMapStore =  defineStore('map',{
             // 先把扫描层准备好再去取统计。两个请求并行的话，
             // 扫描常常因为统计先回来而被取消，动画就看不到了；
             // 扫描请求很小（有数量上限），正常一两秒内就绪。
-            if(isRoi) await this.startCropAnalysisBlink(extent)
+            // 闪烁只属于「作物结构」页，农业地块那边不要这个效果。
+            if(isRoi && this.isCropBlinkRoute()) await this.startCropAnalysisBlink(extent)
             try{
                 const years = Object.keys(this.cropAnalysisYears).map(Number).filter(y => !isNaN(y)).sort((a, b) => a - b)
                 const records = []
@@ -2620,7 +2719,7 @@ addBasinLabelLayer: function() {
                 const groupIds = {
                     imagery: ['sentinel2', 'sentinel1'],
                     weather: ['temperature', 'precipitation'],
-                    base: ['rivers', 'lakes', 'mountains', 'boundaries', 'elevation', 'slope']
+                    base: ['rivers', 'lakes', 'mountains', 'boundaries', 'country_border', 'province_border', 'elevation', 'slope']
                 }
                 const activeIds = (groupIds[this.temporalHoverGroup] || []).filter(id => this.temporalLayerInstances[id])
                 if(!activeIds.length){
@@ -2648,7 +2747,8 @@ addBasinLabelLayer: function() {
                 const items = []
                 const labels = {
                     temperature:'气温', precipitation:'降水量', rivers:'河流', lakes:'湖泊',
-                    mountains:'山系/高地', boundaries:'行政边界'
+                    mountains:'山系/高地', boundaries:'行政边界',
+                    country_border:'国家边界', province_border:'州界'
                 }
                 const translated = {
                     'Tien Shan':'天山山脉', 'Tian Shan':'天山山脉', 'Borohoro Mountains':'博罗科努山脉',

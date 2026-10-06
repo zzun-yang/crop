@@ -11,26 +11,32 @@
     </div>
 
 
-    <!-- 2D/3D 切换按钮 -->
-    <div v-show="isTopographicMapView" class="dimension-toggle">
-      <button 
-        class="toggle-btn"
-        :class="{ active: is2D }"
-        @click="toggle2D3D"
+    <!-- 指北针 -->
+    <svg v-if="showCompass" class="map-compass" viewBox="0 0 48 60" aria-hidden="true">
+      <path d="M24 6 31 40 24 34 17 40Z" fill="#fff" stroke="rgba(10,40,90,.55)" stroke-width="1"/>
+      <text x="24" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">N</text>
+    </svg>
+
+    <!-- 右侧工具条：2D/3D、缩放、全屏、框选 -->
+    <div class="map-tools">
+      <button
+        class="map-tool primary"
+        type="button"
         :title="is2D ? '切换到3D视图' : '切换到2D视图'"
-      >
-        {{ is2D ? '2D' : '3D' }}
+        @click="toggle2D3D"
+      >{{ is2D ? '2D' : '3D' }}</button>
+      <button class="map-tool" type="button" title="放大" @click="zoomBy(1)">+</button>
+      <button class="map-tool" type="button" title="缩小" @click="zoomBy(-1)">−</button>
+      <button class="map-tool" type="button" title="全屏显示" @click="toggleFullscreen">
+        <pi-icon name="expand"/>
       </button>
     </div>
 
-    <!-- 框选截取按钮 -->
-    <div v-show="showMapTools" class="roi-toggle">
-      <button
-        class="roi-btn"
-        :class="{ active: roiApplied, drawing: roiDrawing }"
-        :title="roiTitle"
-        @click="toggleRoi"
-      >{{ roiLabel }}</button>
+    <!-- 比例尺 -->
+    <div class="map-scalebar">
+      <span>0</span>
+      <span class="map-scalebar-bar"></span>
+      <span>100 km</span>
     </div>
 
     <!-- 地区选择 -->
@@ -47,6 +53,7 @@ import {useRoute} from "vue-router";
 import useMapStore from "@/stores/map";
 import TopographicMap3d from "@/components/topographic-map-3D.vue";
 import RegionSelect from "@/components/part/region-select.vue";
+import PiIcon from "@/components/part/pi-icon.vue";
 import 'animate.css';
 
 const store = useMapStore()
@@ -58,6 +65,27 @@ const is2D = computed(() => !is3D.value)
 
 // 判断当前是否在地形图视图
 const isTopographicMapView = computed(() => route.name === 'topographicMap');
+
+// 指北针只在首页和时空数据页显示（与原型一致）
+const showCompass = computed(() => ['home', 'timeSeriesData'].includes(route.name))
+
+const mapDom = ref(null)
+
+const zoomBy = step => {
+  const view = map.value && map.value.getView && map.value.getView()
+  if (!view) return
+  view.animate({zoom: (view.getZoom() || 0) + step, duration: 200})
+}
+
+const toggleFullscreen = () => {
+  const el = mapDom.value || (map.value && map.value.getTargetElement && map.value.getTargetElement())
+  if (!el) return
+  if (document.fullscreenElement) {
+    document.exitFullscreen && document.exitFullscreen()
+  } else if (el.requestFullscreen) {
+    el.requestFullscreen()
+  }
+}
 
 // 框选截取和地区选择目前支持这几个页面
 const MAP_TOOL_ROUTES = ['agriParcel', 'cropClassification']

@@ -3,9 +3,9 @@
     <!-- 拖动把手 -->
     <div class="ca-bar" @pointerdown="startDrag">
       <span class="ca-grip" aria-hidden="true"></span>
-      <span class="ca-bar-title">作物结构分析</span>
+      <span class="ca-bar-title">{{ panelTitle }}</span>
     </div>
-    <div class="ca-tabs">
+    <div v-if="!hideTabs" class="ca-tabs">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -16,11 +16,8 @@
     </div>
 
     <div class="ca-body">
-      <p class="ca-scope">
-        统计范围：<b>{{ cropAnalysisScope === 'roi' ? '框选范围' : '整个流域' }}</b>
-        <em v-if="cropAnalysisScope === 'roi'">（在地图上重新拉框可换范围）</em>
-        <em v-else>（在地图上拉框可只看框内）</em>
-      </p>
+      <!-- 交互识别与作物类型可视化是一体的，框选入口由页面塞进来 -->
+      <slot name="actions"/>
       <p class="ca-hint" v-if="cropAnalysisLoading">
         {{ cropAnalysisScope === 'roi' ? '正在统计…' : '正在统计整个流域（约 31 万个图斑），首次需要一分钟左右…' }}
       </p>
@@ -79,6 +76,34 @@
 
         <!-- 种植分析 -->
         <template v-else>
+          <div class="ca-subtabs">
+            <button
+              class="ca-subtab"
+              :class="{ active: analysisTab === 'stability' }"
+              @click="analysisTab = 'stability'"
+            >种植稳定性分析</button>
+            <button
+              class="ca-subtab"
+              :class="{ active: analysisTab === 'diversity' }"
+              @click="analysisTab = 'diversity'"
+            >种植多样性</button>
+          </div>
+
+          <template v-if="analysisTab === 'stability'">
+          <div class="ca-base">
+            <strong>以 {{ result.stability.baseline || result.baseline }} 年为基准</strong>
+            <span>统计每个地块作物类型改变次数</span>
+          </div>
+          <div class="ca-metrics">
+            <div class="ca-metric">
+              <span>稳定地块占比</span>
+              <strong>{{ stableShare }}</strong>
+            </div>
+            <div class="ca-metric">
+              <span>平均改变次数</span>
+              <strong>{{ avgChanges }}</strong>
+            </div>
+          </div>
           <div class="ca-sub">种植稳定性</div>
           <div class="ca-row"><span>基准年</span><b>{{ result.stability.baseline || result.baseline }}</b></div>
           <div class="ca-row"><span>参与对比年份</span><b>{{ result.stability.years.join(' / ') || '—' }}</b></div>
@@ -93,7 +118,9 @@
           <p class="ca-tip" v-if="!result.stability.comparable">
             稳定性需要至少两年数据，当前只取到 {{ result.years.length }} 年
           </p>
+          </template>
 
+          <template v-else>
           <div class="ca-sub">种植多样性</div>
           <div class="ca-row"><span>作物种类数</span><b>{{ result.diversity.richness }}</b></div>
           <div class="ca-row">
@@ -112,6 +139,7 @@
             <span>单位面积作物类型<br>（种/km²，地块平均）</span>
             <b>{{ result.diversity.parcelTypesPerKm2.toFixed(2) }}</b>
           </div>
+          </template>
         </template>
       </template>
 
@@ -121,7 +149,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import useMapStore from '@/stores/map'
 import { usePanelDrag } from '@/composables/usePanelDrag'
@@ -143,8 +171,42 @@ const tabs = [
   { id: 'analysis', label: '种植分析' }
 ]
 const activeTab = ref('visual')
+// 种植分析里的两个子页签：稳定性 / 多样性
+const analysisTab = ref('stability')
+
+// 二级模块导航条上的选择会切到这个面板里的对应页签
+const props = defineProps({
+  tab: { type: String, default: '' },
+  // 二级模块导航条已经在切页签时，面板内部的页签就不重复显示了
+  hideTabs: { type: Boolean, default: false }
+})
+watch(() => props.tab, value => {
+  if (value && tabs.some(item => item.id === value)) activeTab.value = value
+}, { immediate: true })
 
 const result = computed(() => cropAnalysisResult.value)
+
+// 标题跟着二级模块走，与原型一致
+const panelTitle = computed(() => ({
+  visual: '作物统计信息',
+  series: '作物时间序列',
+  analysis: '种植分析'
+}[activeTab.value] || '作物统计信息'))
+
+// 多年数据接入前，稳定性两个指标先按原型给的示例值展示
+const SAMPLE_STABLE_SHARE = '68.4%'
+const SAMPLE_AVG_CHANGES = '1.7 次'
+const stableShare = computed(() => {
+  const stability = result.value && result.value.stability
+  if(!stability || !stability.comparable || !stability.parcelCount) return SAMPLE_STABLE_SHARE
+  const stable = Number(stability.histogram && stability.histogram[0]) || 0
+  return `${((stable / stability.parcelCount) * 100).toFixed(1)}%`
+})
+const avgChanges = computed(() => {
+  const stability = result.value && result.value.stability
+  if(!stability || !stability.comparable || stability.averageChanges === null) return SAMPLE_AVG_CHANGES
+  return `${stability.averageChanges.toFixed(1)} 次`
+})
 
 const iconOf = code => store.cropAnalysisTypeInfo(code).icon
 
@@ -161,13 +223,13 @@ onMounted(() => {
 <style scoped>
 .ca-panel {
   position: fixed;
-  /* 让开导航条（56px）和右上角的框选按钮 */
-  top: 112px;
-  right: 20px;
+  /* 照原型放在左上，让开顶栏和二级导航条 */
+  top: calc(var(--header-h) + var(--tabs-h) + 11px);
+  left: 11px;
   z-index: 1150;
-  width: 380px;
-  /* 默认高度避开右下角的图例卡片，内容多了内部滚动 */
-  max-height: calc(100vh - 380px);
+  width: 356px;
+  /* 默认高度避开底部的日期时间轴，内容多了内部滚动 */
+  max-height: calc(100vh - var(--header-h) - var(--tabs-h) - 150px);
   display: flex;
   flex-direction: column;
   background-color: #ffffff;
@@ -280,6 +342,81 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: #1a56c4;
+}
+
+/* 种植分析里的小页签：种植稳定性分析 / 种植多样性 */
+.ca-subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ca-subtab {
+  flex: 1 1 0;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #164f9a;
+  background-color: #f2f7fd;
+  border: 1px solid #dfeaf8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ca-subtab.active {
+  color: #fff;
+  font-weight: 600;
+  background-image: linear-gradient(#2c93ff, #156ee4);
+  border-color: transparent;
+}
+
+/* 以某年为基准的说明条 */
+.ca-base {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background-color: #f6faff;
+  border-left: 3px solid #2c93ff;
+  border-radius: 0 6px 6px 0;
+}
+
+.ca-base strong {
+  color: #164f9a;
+  font-size: 13px;
+}
+
+.ca-base span {
+  color: #7890aa;
+  font-size: 12px;
+}
+
+.ca-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.ca-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background-color: #f5f9fe;
+  border: 1px solid #e6eefa;
+  border-radius: 8px;
+}
+
+.ca-metric span {
+  color: #7890aa;
+  font-size: 12px;
+}
+
+.ca-metric strong {
+  color: #102b56;
+  font-size: 18px;
 }
 
 .ca-type {

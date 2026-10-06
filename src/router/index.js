@@ -8,8 +8,13 @@ const router =  createRouter({
         { // 地块分类
             name:'landCover',
             path:'/',
-            redirect: {name:'topographicMap'}, // 重定向 先默认进入topographic
+            redirect: {name:'home'}, // 默认进首页
             // component:()=>import('../components/land-cover.vue')
+        },
+        { // 首页
+            name:'home',
+            path:'/home',
+            component:()=>import('../components/home-view.vue')
         },
         // {
         //     name:'landCover',
